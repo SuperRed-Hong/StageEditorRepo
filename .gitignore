@@ -1,0 +1,40 @@
+# ==============================================
+# UE 插件专用 .gitignore (只保留源码 + 插件描述)
+# ==============================================
+
+# 忽略编译输出
+Binaries/
+Intermediate/
+Build/
+DerivedDataCache/
+Saved/
+
+# 忽略资源（如果你需要提交蓝图/模型，就注释掉下面这行）
+# Content/
+
+# 忽略编辑器自动生成的资源配置
+Config/AutomaticConfig.ini
+Config/DefaultEditorSettings.ini
+Config/DefaultEditorPerProjectUserSettings.ini
+Config/DefaultEngine.ini
+Config/DefaultGame.ini
+Config/DefaultInput.ini
+
+# 忽略系统/编辑器垃圾文件
+.vs/
+.vscode/
+.idea/
+*.sln
+*.suo
+*.user
+*.bak
+*.log
+.DS_Store
+Thumbs.db
+
+# ==============================================
+# 必须保留的文件（不会被忽略）
+# 1. Source/           源码
+# 2. *.uplugin         插件描述文件
+# 3. Config/ 手动写的配置（如不影响引擎的自定义配置）
+# ==============================================
