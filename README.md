@@ -2,6 +2,8 @@
 
 **Stage-Act-Entity** architecture plugin for Unreal Engine 5.6 — a dynamic stage management system using DataLayers for level streaming and scene state control.
 
+[中文文档](README_CN.md)
+
 ## Overview
 
 StageEditor uses a theatrical metaphor to manage scene composition:
@@ -52,12 +54,6 @@ Plugins/StageEditor/Source/
 1. Copy the `Plugins/StageEditor` directory into your UE 5.6 project's `Plugins/` folder
 2. Regenerate project files (right-click `.uproject` → "Generate Visual Studio project files")
 3. Build the project
-
-## Development Status
-
-See `Docs/StageEditor/Overview.md` (Chinese) for full phase-by-phase development progress.
-
-**Current Phase**: Phase 28 — UStageDataLayerAsset custom DataLayerAsset subclass (in design)
 
 ## License
 
