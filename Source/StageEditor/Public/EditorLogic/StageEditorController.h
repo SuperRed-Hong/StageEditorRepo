@@ -97,6 +97,9 @@ public:
 	/** Creates a DataLayerAsset and saves it to Content folder. */
 	class UDataLayerAsset* CreateDataLayerAsset(const FString& AssetName, const FString& FolderPath = TEXT("/StageEditor/DataLayers"));
 
+	/** Prompts user for a new DataLayer name when a conflict is detected. Returns empty string if cancelled. */
+	FString PromptForNewDataLayerName(const FString& CurrentName);
+
 	/** Gets or creates a DataLayerInstance for the given Asset. */
 	class UDataLayerInstance* GetOrCreateInstanceForAsset(class UDataLayerAsset* Asset);
 

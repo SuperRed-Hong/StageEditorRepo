@@ -101,8 +101,7 @@ const TSharedRef<SWidget> FStageDataLayerSyncStatusColumn::ConstructRowWidget(FS
 		case EDataLayerSyncStatus::OutOfSync:
 			StatusBrush = FAppStyle::GetBrush(TEXT("Icons.Warning"));
 			StatusColor = FLinearColor::Yellow;
-			StatusTooltip = FText::Format(LOCTEXT("StatusOutOfSync", "Out of sync: {0}"),
-				FText::FromString(StatusInfo.GetChangeSummary()));
+			StatusTooltip = FDataLayerSyncStatusDetector::GenerateTooltip(StatusInfo);
 			break;
 		case EDataLayerSyncStatus::NotImported:
 		default:

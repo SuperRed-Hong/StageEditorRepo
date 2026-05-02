@@ -12,6 +12,7 @@ class AStage;
 // Delegate Declarations
 //----------------------------------------------------------------
 
+
 /** Broadcast when a valid actor enters the trigger zone. */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTriggerZoneActorEnter, UTriggerZoneComponentBase*, Zone, AActor*, Actor);
 
@@ -183,7 +184,7 @@ public:
 	//----------------------------------------------------------------
 
 	/** Change the visibility in editor*/
-	UPROPERTY(EditAnywhere, Category = "StageEditor",
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "StageEditor",
 		meta = (DisplayName = "Component Visible"))
 	bool bComponentVisible = true;
 

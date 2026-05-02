@@ -2077,6 +2077,20 @@ void SStageEditorPanel::OnRowDoubleClicked(TSharedPtr<FStageTreeItem> Item)
 			if (StageItem->StagePtr.IsValid())
 			{
 				Controller->SetActiveStage(StageItem->StagePtr.Get());
+
+				// Navigate Content Browser to the Act's DataLayer asset
+				if (AStage* Stage = StageItem->StagePtr.Get())
+				{
+					for (const FAct& Act : Stage->Acts)
+					{
+						if (Act.SUID.ActID == Item->ID && Act.AssociatedDataLayer)
+						{
+							TArray<UObject*> Assets = { const_cast<UDataLayerAsset*>(Act.AssociatedDataLayer.Get()) };
+							GEditor->SyncBrowserToObjects(Assets);
+							break;
+						}
+					}
+				}
 			}
 		}
 		// Preview the Act (activates DataLayer etc.)

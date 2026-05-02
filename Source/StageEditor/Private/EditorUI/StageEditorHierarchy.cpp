@@ -17,6 +17,7 @@ FStageEditorHierarchy::~FStageEditorHierarchy()
 		{
 			StageManager->OnStageRegistered.Remove(StageRegisteredHandle);
 			StageManager->OnStageUnregistered.Remove(StageUnregisteredHandle);
+			StageManager->OnStageDataChanged.Remove(StageDataChangedHandle);
 		}
 	}
 }
@@ -37,6 +38,7 @@ FStageEditorHierarchy::FStageEditorHierarchy(FStageEditorMode* Mode, const TWeak
 		{
 			StageRegisteredHandle = StageManager->OnStageRegistered.AddRaw(this, &FStageEditorHierarchy::OnStageRegistered);
 			StageUnregisteredHandle = StageManager->OnStageUnregistered.AddRaw(this, &FStageEditorHierarchy::OnStageUnregistered);
+			StageDataChangedHandle = StageManager->OnStageDataChanged.AddRaw(this, &FStageEditorHierarchy::OnStageDataChanged);
 		}
 	}
 }

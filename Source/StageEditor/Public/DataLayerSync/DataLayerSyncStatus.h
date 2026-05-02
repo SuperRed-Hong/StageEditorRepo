@@ -66,6 +66,18 @@ struct STAGEEDITOR_API FDataLayerSyncStatusInfo
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SyncStatus|Actors")
 	int32 RemovedActorCount = 0;
 
+	/** 新增的 Actor 名称列表（用于 Tooltip 详情） */
+	TArray<FString> AddedActorNames;
+
+	/** 移除的 Actor 名称列表（用于 Tooltip 详情） */
+	TArray<FString> RemovedActorNames;
+
+	/** DataLayer 中当前的 Actor 名称（Source A） */
+	TArray<FString> CurrentDataLayerActorNames;
+
+	/** Act EntityStateOverrides 中当前的 Actor 名称（Source B） */
+	TArray<FString> ActEntityActorNames;
+
 	//----------------------------------------------------------------
 	// 辅助函数
 	//----------------------------------------------------------------

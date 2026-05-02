@@ -129,9 +129,10 @@ namespace
 	}
 
 	/**
-	 * Detect Act-level changes: compare current Actor members with EntityRegistry.
+	 * Detect Act-level changes: compare current Actor members with Act's EntityStateOverrides.
+	 * LogicalActID is SUID.ActID (from FindActIDByDataLayer), NOT array index.
 	 */
-	void DetectActLevelChanges(const AStage* Stage, int32 ActID, const UDataLayerAsset* Asset, FDataLayerSyncStatusInfo& OutInfo)
+	void DetectActLevelChanges(const AStage* Stage, int32 LogicalActID, const UDataLayerAsset* Asset, FDataLayerSyncStatusInfo& OutInfo)
 	{
 		if (!Stage || !Asset)
 		{
@@ -157,8 +158,29 @@ namespace
 			return;
 		}
 
+		// Find the Act by SUID.ActID (FindActIDByDataLayer returns logical ID, not array index)
+		const FAct* TargetAct = nullptr;
+		int32 ActArrayIndex = INDEX_NONE;
+		for (int32 i = 0; i < Stage->Acts.Num(); ++i)
+		{
+			if (Stage->Acts[i].SUID.ActID == LogicalActID)
+			{
+				TargetAct = &Stage->Acts[i];
+				ActArrayIndex = i;
+				break;
+			}
+		}
+		if (!TargetAct)
+		{
+			UE_LOG(LogStageDataLayerSync, Warning,
+				TEXT("[DetectActLevelChanges] Act with SUID.ActID=%d not found in Stage '%s' (has %d Acts)"),
+				LogicalActID, *Stage->GetActorLabel(), Stage->Acts.Num());
+			return;
+		}
+
 		// Get current actors in this DataLayer
 		TSet<FSoftObjectPath> CurrentActorPaths;
+		TMap<FSoftObjectPath, FString> ActorPathToName;
 		for (TActorIterator<AActor> It(World); It; ++It)
 		{
 			AActor* Actor = *It;
@@ -167,37 +189,90 @@ namespace
 				TArray<const UDataLayerInstance*> ActorDataLayers = Actor->GetDataLayerInstances();
 				if (ActorDataLayers.Contains(Instance))
 				{
-					CurrentActorPaths.Add(FSoftObjectPath(Actor));
+					FSoftObjectPath Path(Actor);
+					CurrentActorPaths.Add(Path);
+					ActorPathToName.Add(Path, Actor->GetActorNameOrLabel());
 				}
 			}
 		}
 
-		// Get registered Entitys from Stage's EntityRegistry
+		// Get registered Entitys from the Act's EntityStateOverrides (not Stage's EntityRegistry)
 		TSet<FSoftObjectPath> RegisteredEntityPaths;
-		for (const auto& Pair : Stage->EntityRegistry)
+		for (const auto& Pair : TargetAct->EntityStateOverrides)
 		{
-			if (Pair.Value.IsValid())
+			AActor* Entity = Stage->GetEntityByID(Pair.Key);
+			if (Entity)
 			{
-				RegisteredEntityPaths.Add(Pair.Value.ToSoftObjectPath());
+				RegisteredEntityPaths.Add(FSoftObjectPath(Entity));
 			}
 		}
 
-		// Count differences
+		// Populate Source A: actors currently in the DataLayer
+		for (const FSoftObjectPath& Path : CurrentActorPaths)
+		{
+			const FString* Name = ActorPathToName.Find(Path);
+			OutInfo.CurrentDataLayerActorNames.Add(Name ? *Name : TEXT("(unknown)"));
+		}
+
+		// Populate Source B: entities in the Act's EntityStateOverrides
+		for (const auto& Pair : TargetAct->EntityStateOverrides)
+		{
+			AActor* Entity = Stage->GetEntityByID(Pair.Key);
+			if (Entity)
+			{
+				OutInfo.ActEntityActorNames.Add(Entity->GetActorNameOrLabel());
+			}
+		}
+
+		// Diff: added = in DataLayer but not in Act
 		for (const FSoftObjectPath& Path : CurrentActorPaths)
 		{
 			if (!RegisteredEntityPaths.Contains(Path))
 			{
 				OutInfo.AddedActorCount++;
+				const FString* Name = ActorPathToName.Find(Path);
+				OutInfo.AddedActorNames.Add(Name ? *Name : TEXT("(unknown)"));
 			}
 		}
 
+		// Diff: removed = in Act but not in DataLayer
 		for (const FSoftObjectPath& Path : RegisteredEntityPaths)
 		{
 			if (!CurrentActorPaths.Contains(Path))
 			{
 				OutInfo.RemovedActorCount++;
+				AActor* Entity = Cast<AActor>(Path.ResolveObject());
+				if (Entity)
+				{
+					OutInfo.RemovedActorNames.Add(Entity->GetActorNameOrLabel());
+				}
+				else
+				{
+					OutInfo.RemovedActorNames.Add(Path.GetAssetPathString());
+				}
 			}
 		}
+
+		// Diagnostic log — filter Output Log by "LogStageDataLayerSync"
+		UE_LOG(LogStageDataLayerSync, Log,
+			TEXT("==== [DetectActLevelChanges] Act='%s' (LogicalActID=%d, ArrayIndex=%d) DataLayer='%s' ===="),
+			*TargetAct->DisplayName, LogicalActID, ActArrayIndex, *Asset->GetName());
+		UE_LOG(LogStageDataLayerSync, Log,
+			TEXT("  [DataLayer] %d actor(s): %s"),
+			OutInfo.CurrentDataLayerActorNames.Num(),
+			*FString::Join(OutInfo.CurrentDataLayerActorNames, TEXT(", ")));
+		UE_LOG(LogStageDataLayerSync, Log,
+			TEXT("  [Act Entities] %d entity(s): %s"),
+			OutInfo.ActEntityActorNames.Num(),
+			*FString::Join(OutInfo.ActEntityActorNames, TEXT(", ")));
+		UE_LOG(LogStageDataLayerSync, Log,
+			TEXT("  +Added=%d: %s"),
+			OutInfo.AddedActorNames.Num(),
+			*FString::Join(OutInfo.AddedActorNames, TEXT(", ")));
+		UE_LOG(LogStageDataLayerSync, Log,
+			TEXT("  -Removed=%d: %s"),
+			OutInfo.RemovedActorNames.Num(),
+			*FString::Join(OutInfo.RemovedActorNames, TEXT(", ")));
 	}
 }
 
@@ -245,7 +320,7 @@ FDataLayerSyncStatusInfo FDataLayerSyncStatusDetector::DetectStatus(const UDataL
 	}
 	else
 	{
-		// Act-level: compare Actor members with EntityRegistry
+		// Act-level: compare Actor members with Act's EntityStateOverrides
 		UStageManagerSubsystem* RuntimeSub = GetStageManagerSubsystem();
 		int32 ActID = RuntimeSub ? RuntimeSub->FindActIDByDataLayer(Stage, const_cast<UDataLayerAsset*>(Asset)) : INDEX_NONE;
 		DetectActLevelChanges(Stage, ActID, Asset, Info);
@@ -300,17 +375,47 @@ FText FDataLayerSyncStatusDetector::GenerateTooltip(const FDataLayerSyncStatusIn
 			FText::FromString(Name)));
 	}
 
-	// Actor changes
-	if (StatusInfo.AddedActorCount > 0 || StatusInfo.RemovedActorCount > 0)
-	{
-		Lines.Add(FText::Format(
-			LOCTEXT("ActorChanges", "Actor changes: +{0} / -{1}"),
-			FText::AsNumber(StatusInfo.AddedActorCount),
-			FText::AsNumber(StatusInfo.RemovedActorCount)));
-	}
+	// ---- Actor-level comparison detail ----
 
-	// Action hint
-	Lines.Add(LOCTEXT("ClickToSync", "Click Sync to update"));
+	// Source A: what's actually in the DataLayer
+	if (StatusInfo.CurrentDataLayerActorNames.Num() > 0 || StatusInfo.AddedActorNames.Num() > 0 || StatusInfo.RemovedActorNames.Num() > 0)
+	{
+		Lines.Add(FText::FromString(TEXT("────────────────────────")));
+		Lines.Add(FText::Format(
+			LOCTEXT("SourceADataLayer", "[DataLayer] {0} actor(s): {1}"),
+			FText::AsNumber(StatusInfo.CurrentDataLayerActorNames.Num()),
+			FText::FromString(StatusInfo.CurrentDataLayerActorNames.Num() > 0
+				? FString::Join(StatusInfo.CurrentDataLayerActorNames, TEXT(", "))
+				: TEXT("(none)"))));
+
+		// Source B: what the Act thinks it has
+		Lines.Add(FText::Format(
+			LOCTEXT("SourceBActEntities", "[Act Entities] {0} entity(s): {1}"),
+			FText::AsNumber(StatusInfo.ActEntityActorNames.Num()),
+			FText::FromString(StatusInfo.ActEntityActorNames.Num() > 0
+				? FString::Join(StatusInfo.ActEntityActorNames, TEXT(", "))
+				: TEXT("(none)"))));
+
+		Lines.Add(FText::FromString(TEXT("────────────────────────")));
+
+		// Diff: added actors (in DataLayer, not in Act)
+		if (StatusInfo.AddedActorNames.Num() > 0)
+		{
+			Lines.Add(FText::Format(
+				LOCTEXT("AddedActors", "+{0} new: {1}"),
+				FText::AsNumber(StatusInfo.AddedActorNames.Num()),
+				FText::FromString(FString::Join(StatusInfo.AddedActorNames, TEXT(", ")))));
+		}
+
+		// Diff: removed actors (in Act, not in DataLayer)
+		if (StatusInfo.RemovedActorNames.Num() > 0)
+		{
+			Lines.Add(FText::Format(
+				LOCTEXT("RemovedActors", "-{0} removed: {1}"),
+				FText::AsNumber(StatusInfo.RemovedActorNames.Num()),
+				FText::FromString(FString::Join(StatusInfo.RemovedActorNames, TEXT(", ")))));
+		}
+	}
 
 	return FText::Join(FText::FromString(TEXT("\n")), Lines);
 }

@@ -37,6 +37,10 @@
 #include "ISourceControlModule.h"
 #include "ISourceControlProvider.h"
 #include "SourceControlHelpers.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Widgets/Input/SEditableTextBox.h"
+#include "Widgets/Input/SButton.h"
+#include "Widgets/Layout/SBox.h"
 
 #define LOCTEXT_NAMESPACE "FStageEditorController"
 
@@ -1423,10 +1427,30 @@ UDataLayerAsset* FStageEditorController::CreateDataLayerAsset(const FString& Ass
 	FString PackagePath = FolderPath / AssetName;
 	FString PackageName = FPackageName::ObjectPathToPackageName(PackagePath);
 
-	// Check if asset already exists
+	// Check if asset already exists — prompt user for conflict resolution
 	if (UDataLayerAsset* ExistingAsset = LoadObject<UDataLayerAsset>(nullptr, *PackagePath))
 	{
-		return ExistingAsset;
+		const FText Title = LOCTEXT("DataLayerNameConflict", "DataLayer Name Conflict");
+		const FText Message = FText::Format(
+			LOCTEXT("DataLayerNameConflictMsg", "DataLayer '{0}' already exists.\n\nYes = Reuse existing asset\nNo = Enter a new name\nCancel = Abort"),
+			FText::FromString(AssetName));
+
+		const EAppReturnType::Type Choice = FMessageDialog::Open(EAppMsgType::YesNoCancel, Message, Title);
+
+		if (Choice == EAppReturnType::Yes)
+		{
+			UE_LOG(LogStageEditor, Log, TEXT("Reusing existing DataLayerAsset: %s"), *PackagePath);
+			return ExistingAsset;
+		}
+		if (Choice == EAppReturnType::No)
+		{
+			const FString NewName = PromptForNewDataLayerName(AssetName);
+			if (!NewName.IsEmpty() && NewName != AssetName)
+			{
+				return CreateDataLayerAsset(NewName, FolderPath);
+			}
+		}
+		return nullptr;
 	}
 
 	// Create the package
@@ -1460,6 +1484,76 @@ UDataLayerAsset* FStageEditorController::CreateDataLayerAsset(const FString& Ass
 	}
 
 	return nullptr;
+}
+
+FString FStageEditorController::PromptForNewDataLayerName(const FString& CurrentName)
+{
+	TSharedPtr<FString> ResultName = MakeShared<FString>(CurrentName);
+	TSharedPtr<bool> bConfirmed = MakeShared<bool>(false);
+
+	TSharedRef<SEditableTextBox> NameInput = SNew(SEditableTextBox)
+		.Text(FText::FromString(CurrentName))
+		.SelectAllTextWhenFocused(true)
+		.OnTextCommitted_Lambda([ResultName](const FText& Text, ETextCommit::Type CommitType)
+		{
+			*ResultName = Text.ToString();
+		});
+
+	TSharedRef<SWindow> Window = SNew(SWindow)
+		.Title(LOCTEXT("PromptForNewDataLayerNameTitle", "Enter New DataLayer Name"))
+		.ClientSize(FVector2D(420, 120))
+		.SupportsMaximize(false)
+		.SupportsMinimize(false)
+		.SizingRule(ESizingRule::Autosized);
+
+	Window->SetContent(
+		SNew(SBox)
+		.Padding(10)
+		[
+			SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 8)
+			[
+				SNew(STextBlock)
+				.Text(LOCTEXT("PromptForNewDataLayerNameLabel", "This name already exists. Enter a new name:"))
+			]
+			+ SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 10)
+			[
+				NameInput
+			]
+			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 5, 0)
+				[
+					SNew(SButton)
+					.Text(LOCTEXT("OK", "OK"))
+					.OnClicked_Lambda([Window, ResultName, bConfirmed]()
+					{
+						*ResultName = ResultName->TrimStartAndEnd();
+						if (!ResultName->IsEmpty())
+						{
+							*bConfirmed = true;
+							Window->RequestDestroyWindow();
+						}
+						return FReply::Handled();
+					})
+				]
+				+ SHorizontalBox::Slot().AutoWidth()
+				[
+					SNew(SButton)
+					.Text(LOCTEXT("Cancel", "Cancel"))
+					.OnClicked_Lambda([Window]()
+					{
+						Window->RequestDestroyWindow();
+						return FReply::Handled();
+					})
+				]
+			]
+		]);
+
+	FSlateApplication::Get().AddModalWindow(Window, nullptr);
+
+	return *bConfirmed ? *ResultName : FString();
 }
 
 UDataLayerInstance* FStageEditorController::GetOrCreateInstanceForAsset(UDataLayerAsset* Asset)
@@ -1580,6 +1674,14 @@ bool FStageEditorController::DeleteDataLayerForAct(int32 ActID)
 			DataLayerSubsystem->DeleteDataLayer(Instance);
 			break;
 		}
+	}
+
+	// Delete the DataLayer asset file from disk
+	if (UDataLayerAsset* AssetToDelete = TargetAct->AssociatedDataLayer)
+	{
+		TArray<UObject*> ObjectsToDelete;
+		ObjectsToDelete.Add(AssetToDelete);
+		ObjectTools::ForceDeleteObjects(ObjectsToDelete, false);
 	}
 
 	TargetAct->AssociatedDataLayer = nullptr;

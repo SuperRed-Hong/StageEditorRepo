@@ -292,7 +292,7 @@ FDataLayerSyncResult FDataLayerSynchronizer::SyncStageLevelChanges(
 
 FDataLayerSyncResult FDataLayerSynchronizer::SyncActLevelChanges(
 	AStage* Stage,
-	int32 ActID,
+	int32 LogicalActID,
 	UDataLayerAsset* ActDataLayer,
 	const FDataLayerSyncStatusInfo& StatusInfo,
 	UWorld* World)
@@ -300,10 +300,29 @@ FDataLayerSyncResult FDataLayerSynchronizer::SyncActLevelChanges(
 	FDataLayerSyncResult Result;
 	Result.bSuccess = true;
 
-	if (!Stage || !World || ActID < 0)
+	if (!Stage || !World || LogicalActID < 0)
 	{
 		Result.bSuccess = false;
 		Result.ErrorMessage = LOCTEXT("ErrorInvalidActParams", "Invalid Stage, World, or ActID");
+		return Result;
+	}
+
+	// Find the Act by SUID.ActID (FindActIDByDataLayer returns logical ID, not array index)
+	FAct* TargetAct = nullptr;
+	for (FAct& Act : Stage->Acts)
+	{
+		if (Act.SUID.ActID == LogicalActID)
+		{
+			TargetAct = &Act;
+			break;
+		}
+	}
+	if (!TargetAct)
+	{
+		Result.bSuccess = false;
+		Result.ErrorMessage = FText::Format(
+			LOCTEXT("ErrorActNotFound", "Act with SUID.ActID={0} not found in Stage"),
+			FText::AsNumber(LogicalActID));
 		return Result;
 	}
 
@@ -320,13 +339,14 @@ FDataLayerSyncResult FDataLayerSynchronizer::SyncActLevelChanges(
 		}
 	}
 
-	// Collect registered Entity paths
+	// Collect Entity paths registered in this Act's EntityStateOverrides (not Stage's EntityRegistry)
 	TSet<FSoftObjectPath> RegisteredEntityPaths;
-	for (const auto& Pair : Stage->EntityRegistry)
+	for (const auto& Pair : TargetAct->EntityStateOverrides)
 	{
-		if (Pair.Value.IsValid())
+		AActor* Entity = Stage->GetEntityByID(Pair.Key);
+		if (Entity)
 		{
-			RegisteredEntityPaths.Add(Pair.Value.ToSoftObjectPath());
+			RegisteredEntityPaths.Add(FSoftObjectPath(Entity));
 		}
 	}
 
@@ -341,34 +361,28 @@ FDataLayerSyncResult FDataLayerSynchronizer::SyncActLevelChanges(
 				int32 EntityID = Stage->RegisterEntity(Actor);
 				if (EntityID >= 0)
 				{
-					// Set default state in this Act
-					if (ActID < Stage->Acts.Num())
-					{
-						Stage->Acts[ActID].EntityStateOverrides.Add(EntityID, 0);
-					}
+					TargetAct->EntityStateOverrides.Add(EntityID, 0);
 					Result.AddedEntityCount++;
 				}
 			}
 		}
 	}
 
-	// Unregister removed actors
+	// Remove entities no longer in this DataLayer from the Act's EntityStateOverrides
+	// Don't call UnregisterEntity — the Entity may still be used by other Acts
 	TArray<int32> EntitysToRemove;
-	for (const auto& Pair : Stage->EntityRegistry)
+	for (const auto& Pair : TargetAct->EntityStateOverrides)
 	{
-		if (Pair.Value.IsValid())
+		AActor* Entity = Stage->GetEntityByID(Pair.Key);
+		if (Entity && !CurrentActorPaths.Contains(FSoftObjectPath(Entity)))
 		{
-			FSoftObjectPath EntityPath = Pair.Value.ToSoftObjectPath();
-			if (!CurrentActorPaths.Contains(EntityPath))
-			{
-				EntitysToRemove.Add(Pair.Key);
-			}
+			EntitysToRemove.Add(Pair.Key);
 		}
 	}
 
 	for (int32 EntityID : EntitysToRemove)
 	{
-		Stage->UnregisterEntity(EntityID);
+		TargetAct->EntityStateOverrides.Remove(EntityID);
 		Result.RemovedEntityCount++;
 	}
 
