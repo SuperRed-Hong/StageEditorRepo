@@ -36,6 +36,7 @@
 #include "Engine/SCS_Node.h"
 #include "ISourceControlModule.h"
 #include "ISourceControlProvider.h"
+#include "SourceControlHelpers.h"
 
 #define LOCTEXT_NAMESPACE "FStageEditorController"
 
@@ -1450,6 +1451,10 @@ UDataLayerAsset* FStageEditorController::CreateDataLayerAsset(const FString& Ass
 
 	if (UPackage::SavePackage(Package, NewAsset, *FilePath, SaveArgs))
 	{
+		// Mark for P4 add (UPackage::SavePackage bypasses UEditorEngine::Save auto-add pipeline)
+		FText FailReason;
+		SourceControlHelpers::CheckoutOrMarkForAdd(FilePath, FText(), nullptr, FailReason);
+
 		UE_LOG(LogStageEditor, Log, TEXT("Created DataLayerAsset: %s"), *PackagePath);
 		return NewAsset;
 	}
