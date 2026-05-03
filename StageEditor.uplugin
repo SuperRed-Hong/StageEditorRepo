@@ -1,15 +1,15 @@
 {
 	"FileVersion": 3,
 	"Version": 1,
-	"VersionName": "3.3",
+	"VersionName": "3.5",
 	"FriendlyName": "StageEditor",
 	"Description": "A dynamic stage system for managing level streaming and state changes via DataLayers.",
 	"Category": "Level Design",
 	"CreatedBy": "Flynn Hong",
-	"CreatedByURL": "",
-	"DocsURL": "",
+	"CreatedByURL": "https://github.com/SuperRed-Hong/StageEditorRepo",
+	"DocsURL": "https://github.com/SuperRed-Hong/StageEditorRepo",
 	"MarketplaceURL": "",
-	"SupportURL": "734005065@qq.com",
+	"SupportURL": "https://github.com/SuperRed-Hong/StageEditorRepo",
 	"CanContainContent": true,
 	"IsBetaVersion": true,
 	"IsExperimentalVersion": false,
@@ -25,5 +25,6 @@
 			"Type": "Editor",
 			"LoadingPhase": "PostEngineInit"
 		}
-	]
+	],
+	"NoCode": true
 }
