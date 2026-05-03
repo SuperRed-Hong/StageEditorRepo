@@ -72,11 +72,11 @@ public:
 	 * The current state of this Entity.
 	 * Modified by the Stage Manager via SetEntityState().
 	 */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "StageEditor")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "StageEditor")
 	int32 EntityState = 0;
 
 	/** The previous state before the last change. Useful for transition logic. */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "StageEditor")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "StageEditor")
 	int32 PreviousEntityState = 0;
 
 	/** Event fired when EntityState changes. Implement logic here in Blueprints. */

@@ -1202,8 +1202,53 @@ void FStageEditorController::OnLevelActorDeleted(AActor* InActor)
 		// Use "Clean Orphaned Entities" button to clean up orphaned Entities.
 		// Use UI Delete button for Stage to get confirmation dialog and delete DataLayers.
 
+		AStage* Stage = Cast<AStage>(InActor);
+		int32 StageID = Stage ? Stage->GetStageID() : -1;
+		FString StageName = InActor->GetActorLabel();
+
+		// Auto-unregister from Registry so orphaned entries don't accumulate
+		if (StageID > 0)
+		{
+			if (UStageEditorSubsystem* EditorSubsystem = GEditor->GetEditorSubsystem<UStageEditorSubsystem>())
+			{
+				UWorld* StageWorld = InActor->GetWorld();
+				if (UStageRegistryAsset* Registry = EditorSubsystem->GetOrLoadRegistryAsset(StageWorld))
+				{
+					bool bCanModify = true;
+					if (Registry->GetCollaborationMode() == ECollaborationMode::Multi)
+					{
+						FString ErrorMessage;
+						if (!EditorSubsystem->CheckOutToChangelist(Registry, ErrorMessage))
+						{
+							UE_LOG(LogStageEditor, Warning,
+								TEXT("Cannot checkout Registry to unregister deleted Stage '%s': %s"),
+								*StageName, *ErrorMessage);
+							bCanModify = false;
+						}
+					}
+
+					if (bCanModify && Registry->Unregister(StageID))
+					{
+						UE_LOG(LogStageEditor, Log,
+							TEXT("Auto-unregistered Stage '%s' (ID:%d) from Registry on level deletion"),
+							*StageName, StageID);
+
+						if (Registry->GetCollaborationMode() == ECollaborationMode::Multi)
+						{
+							EditorSubsystem->AppendStageChangeToChangelist(StageID, StageName, false);
+							EditorSubsystem->SaveRegistryToDisk(Registry);
+						}
+						else
+						{
+							Registry->MarkPackageDirty();
+						}
+					}
+				}
+			}
+		}
+
 		UE_LOG(LogStageEditor, Log, TEXT("Stage '%s' deleted (DataLayers and Entities kept). Use 'Clean Orphaned' to clean up."),
-			*InActor->GetActorLabel());
+			*StageName);
 
 		// Refresh UI to reflect Stage removal
 		FindStageInWorld();

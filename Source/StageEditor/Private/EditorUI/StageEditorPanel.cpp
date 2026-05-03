@@ -530,19 +530,19 @@ void SStageEditorPanel::Construct(const FArguments& InArgs, TSharedPtr<FStageEdi
 							.AutoWrapText(true)
 						]
 
-						// Phase 13.9: Dynamic Sync/Reconcile Button
-						+ SHorizontalBox::Slot()
-						.AutoWidth()
-						.VAlign(VAlign_Center)
-						.Padding(10, 0, 0, 0)
-						[
-							SNew(SButton)
-							.Text(this, &SStageEditorPanel::GetSyncButtonText)
-							.ToolTipText(this, &SStageEditorPanel::GetSyncButtonTooltip)
-							.OnClicked(this, &SStageEditorPanel::OnSyncRegistryClicked)
-							.ButtonStyle(FAppStyle::Get(), "PrimaryButton")
-						]
 					]
+				]
+
+				// Sync Registry Button (always visible, works in both Solo and Multi modes)
+				+ SVerticalBox::Slot()
+				.AutoHeight()
+				.Padding(0, 2, 0, 2)
+				[
+					SNew(SButton)
+					.Text(this, &SStageEditorPanel::GetSyncButtonText)
+					.ToolTipText(this, &SStageEditorPanel::GetSyncButtonTooltip)
+					.OnClicked(this, &SStageEditorPanel::OnSyncRegistryClicked)
+					.ButtonStyle(FAppStyle::Get(), "PrimaryButton")
 				]
 
 				// Tree View with Header Row
@@ -3130,82 +3130,12 @@ FText SStageEditorPanel::GetSyncStatusText() const
 
 FText SStageEditorPanel::GetSyncButtonText() const
 {
-	if (!Controller.IsValid())
-	{
-		return LOCTEXT("SyncRegistry", "Sync Registry");
-	}
-
-	// Get current world and registry
-	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
-	if (!World)
-	{
-		return LOCTEXT("SyncRegistry", "Sync Registry");
-	}
-
-	UStageEditorSubsystem* EditorSubsystem = GEditor->GetEditorSubsystem<UStageEditorSubsystem>();
-	if (!EditorSubsystem)
-	{
-		return LOCTEXT("SyncRegistry", "Sync Registry");
-	}
-
-	UStageRegistryAsset* Registry = EditorSubsystem->GetOrLoadRegistryAsset(World);
-	if (!Registry)
-	{
-		return LOCTEXT("SyncRegistry", "Sync Registry");
-	}
-
-	// Calculate sync status
-	FRegistrySyncStatus SyncStatus = Controller->CalculateSyncStatus(World, Registry);
-
-	// Phase 13.9: Priority to reconciliation if there are offline-created Stages
-	int32 ReconcileCount = SyncStatus.GetPendingReconciliationCount();
-	if (ReconcileCount > 0)
-	{
-		return FText::Format(LOCTEXT("ReconcileStages", "Reconcile {0} Stage(s)"), FText::AsNumber(ReconcileCount));
-	}
-
-	// Default: Sync Registry
-	return LOCTEXT("SyncRegistry", "Sync Registry");
+	return StateManager.IsValid() ? StateManager->GetCachedSyncButtonText() : LOCTEXT("SyncRegistry", "Sync Registry");
 }
 
 FText SStageEditorPanel::GetSyncButtonTooltip() const
 {
-	if (!Controller.IsValid())
-	{
-		return LOCTEXT("SyncRegistry_Tooltip", "Assign IDs to pending Stages and remove orphaned Registry entries");
-	}
-
-	// Get current world and registry
-	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
-	if (!World)
-	{
-		return LOCTEXT("SyncRegistry_Tooltip", "Assign IDs to pending Stages and remove orphaned Registry entries");
-	}
-
-	UStageEditorSubsystem* EditorSubsystem = GEditor->GetEditorSubsystem<UStageEditorSubsystem>();
-	if (!EditorSubsystem)
-	{
-		return LOCTEXT("SyncRegistry_Tooltip", "Assign IDs to pending Stages and remove orphaned Registry entries");
-	}
-
-	UStageRegistryAsset* Registry = EditorSubsystem->GetOrLoadRegistryAsset(World);
-	if (!Registry)
-	{
-		return LOCTEXT("SyncRegistry_Tooltip", "Assign IDs to pending Stages and remove orphaned Registry entries");
-	}
-
-	// Calculate sync status
-	FRegistrySyncStatus SyncStatus = Controller->CalculateSyncStatus(World, Registry);
-
-	// Phase 13.9: Priority to reconciliation if there are offline-created Stages
-	int32 ReconcileCount = SyncStatus.GetPendingReconciliationCount();
-	if (ReconcileCount > 0)
-	{
-		return LOCTEXT("ReconcileStages_Tooltip", "Convert temporary IDs to real IDs for offline-created Stages");
-	}
-
-	// Default: Sync Registry tooltip
-	return LOCTEXT("SyncRegistry_Tooltip", "Assign IDs to pending Stages and remove orphaned Registry entries");
+	return StateManager.IsValid() ? StateManager->GetCachedSyncButtonTooltip() : LOCTEXT("SyncRegistry_Tooltip", "Assign IDs to pending Stages and remove orphaned Registry entries");
 }
 
 FReply SStageEditorPanel::OnSyncRegistryClicked()
@@ -3232,7 +3162,6 @@ FReply SStageEditorPanel::OnSyncRegistryClicked()
 				{
 					// Priority: Call ReconcilePendingStages() first
 					Controller->ReconcilePendingStages();
-					return FReply::Handled();
 				}
 			}
 		}

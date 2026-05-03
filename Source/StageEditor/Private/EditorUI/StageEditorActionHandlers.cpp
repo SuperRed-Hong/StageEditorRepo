@@ -298,7 +298,12 @@ FReply FStageEditorActionHandlers::OnCreateRegistryClicked()
 		return FReply::Handled();
 	}
 
-	// Create Registry
+	// Start progress bar
+	TUniquePtr<FScopedSlowTask> Progress = DebugHeader::CreateProgressTask(4.0f,
+		LOCTEXT("CreateRegistryProgress", "Creating Stage Registry..."), false);
+
+	// Step 1: Create Registry
+	Progress->EnterProgressFrame(1.0f, LOCTEXT("CreatingRegistryAsset", "Creating Registry asset..."));
 	UStageRegistryAsset* Registry = EditorSubsystem->CreateRegistryAsset(World, Mode);
 	if (!Registry)
 	{
@@ -307,7 +312,8 @@ FReply FStageEditorActionHandlers::OnCreateRegistryClicked()
 		return FReply::Handled();
 	}
 
-	// Analyze existing Stages and show migration dialog if needed
+	// Step 2: Analyze existing Stages
+	Progress->EnterProgressFrame(1.0f, LOCTEXT("AnalyzingStages", "Analyzing existing Stages..."));
 	FMigrationAnalysisResult Analysis = FStageMigrationAnalyzer::AnalyzeStages(World);
 
 	// Debug logging
@@ -318,6 +324,8 @@ FReply FStageEditorActionHandlers::OnCreateRegistryClicked()
 		Analysis.ConflictStageCount,
 		Analysis.HasIssues() ? TEXT("TRUE") : TEXT("FALSE"));
 
+	// Step 3: Register / Migrate Stages
+	Progress->EnterProgressFrame(1.0f, LOCTEXT("RegisteringStages", "Registering Stages..."));
 	if (Analysis.HasIssues())
 	{
 		UE_LOG(LogStageEditor, Log, TEXT("OnCreateRegistryClicked: Showing Migration Dialog..."));
@@ -351,6 +359,21 @@ FReply FStageEditorActionHandlers::OnCreateRegistryClicked()
 
 		FMessageDialog::Open(EAppMsgType::Ok,
 			LOCTEXT("RegistryCreatedSuccess", "Registry created successfully! All Stages have been registered."));
+	}
+
+	// Step 4: Save, checkout to dedicated Changelist, and show Changelist panel
+	Progress->EnterProgressFrame(1.0f, LOCTEXT("SavingAndCheckout", "Saving and checking out..."));
+	{
+		FString ErrorMsg;
+		EditorSubsystem->SaveRegistryToDisk(Registry);
+		EditorSubsystem->CheckOutToChangelist(Registry, ErrorMsg);
+
+		// Append creation summary to changelist description
+		FString MapName = World->GetMapName();
+		int32 StageCount = Analysis.GetTotalStageCount();
+		EditorSubsystem->AppendRegistryCreationToChangelist(MapName, StageCount, Mode);
+
+		EditorSubsystem->OpenChangelistPanel();
 	}
 
 	RefreshUI();

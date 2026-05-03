@@ -66,6 +66,12 @@ public:
 	/** Get cached sync status text (FAST: reads member variable). */
 	FText GetCachedSyncStatusText() const { return CachedSyncStatusText; }
 
+	/** Get cached sync button text (FAST: reads member variable). */
+	FText GetCachedSyncButtonText() const { return CachedSyncButtonText; }
+
+	/** Get cached sync button tooltip (FAST: reads member variable). */
+	FText GetCachedSyncButtonTooltip() const { return CachedSyncButtonTooltip; }
+
 	/** Get cached sync warning visibility (FAST: reads member variable). */
 	EVisibility GetCachedSyncWarningVisibility() const { return CachedSyncWarningVisibility; }
 
@@ -165,6 +171,12 @@ private:
 	 * After fix: Updated only on explicit refresh or operations.
 	 */
 	FText CachedSyncStatusText;
+
+	/** Cached Sync Button text (PERFORMANCE: Updated on demand, not per frame). */
+	FText CachedSyncButtonText;
+
+	/** Cached Sync Button tooltip (PERFORMANCE: Updated on demand, not per frame). */
+	FText CachedSyncButtonTooltip;
 
 	/**
 	 * Cached Sync Warning visibility (PERFORMANCE: Updated on demand, not per frame).

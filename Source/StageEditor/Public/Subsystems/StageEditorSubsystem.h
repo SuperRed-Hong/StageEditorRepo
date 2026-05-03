@@ -236,6 +236,15 @@ public:
 	 */
 	void AppendStageChangeToChangelist(int32 StageID, const FString& StageName, bool bAdded);
 
+	/**
+	 * Append Registry creation summary to the Changelist description.
+	 *
+	 * @param MapName - Name of the map/level
+	 * @param StageCount - Number of Stages registered
+	 * @param Mode - Collaboration mode (Solo/Multi)
+	 */
+	void AppendRegistryCreationToChangelist(const FString& MapName, int32 StageCount, ECollaborationMode Mode);
+
 	//----------------------------------------------------------------
 	// Phase 18: Source Control Status Auto-Refresh
 	//----------------------------------------------------------------

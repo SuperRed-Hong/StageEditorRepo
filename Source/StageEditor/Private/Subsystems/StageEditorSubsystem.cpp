@@ -210,14 +210,11 @@ UStageRegistryAsset* UStageEditorSubsystem::CreateRegistryAsset(UWorld* Level, E
 	FSoftObjectPath LevelPath(Level);
 	LoadedRegistries.Add(LevelPath, NewRegistry);
 
-	// Multi-user mode: Check Out file
-	if (Mode == ECollaborationMode::Multi)
+	// Add to Source Control (mark for add if new, or checkout if already tracked)
+	if (!CheckOutRegistryFile(NewRegistry))
 	{
-		if (!CheckOutRegistryFile(NewRegistry))
-		{
-			UE_LOG(LogStageEditorSubsystem, Warning,
-				TEXT("CreateRegistryAsset: Failed to check out Registry file (Source Control issue)"));
-		}
+		UE_LOG(LogStageEditorSubsystem, Warning,
+			TEXT("CreateRegistryAsset: Failed to add/checkout Registry file to Source Control"));
 	}
 
 	UE_LOG(LogStageEditorSubsystem, Log, TEXT("CreateRegistryAsset: Created Registry at '%s' (Mode=%s)"),
@@ -438,7 +435,7 @@ bool UStageEditorSubsystem::CheckOutRegistryFile(UStageRegistryAsset* Registry)
 	ISourceControlModule& SCModule = FModuleManager::LoadModuleChecked<ISourceControlModule>("SourceControl");
 	ISourceControlProvider& SCProvider = SCModule.GetProvider();
 
-	FString PackageFileName = Registry->GetPackage()->GetPathName();
+	FString PackageFileName = SourceControlHelpers::PackageFilename(Registry->GetPackage());
 	FSourceControlStatePtr FileState = SCProvider.GetState(PackageFileName, EStateCacheUsage::ForceUpdate);
 
 	if (!FileState.IsValid())
@@ -964,6 +961,52 @@ void UStageEditorSubsystem::AppendStageChangeToChangelist(int32 StageID, const F
 	else
 	{
 		UE_LOG(LogStageEditorSubsystem, Warning, TEXT("AppendStageChangeToChangelist: Failed to update description"));
+	}
+}
+
+void UStageEditorSubsystem::AppendRegistryCreationToChangelist(const FString& MapName, int32 StageCount, ECollaborationMode Mode)
+{
+	if (!IsSourceControlEnabled())
+	{
+		return;
+	}
+
+	FSourceControlChangelistStatePtr ChangelistState = GetOrCreateRegistryChangelist();
+	if (!ChangelistState.IsValid())
+	{
+		UE_LOG(LogStageEditorSubsystem, Warning, TEXT("AppendRegistryCreationToChangelist: Failed to get changelist"));
+		return;
+	}
+
+	ISourceControlModule& SCModule = FModuleManager::LoadModuleChecked<ISourceControlModule>("SourceControl");
+	ISourceControlProvider& SCProvider = SCModule.GetProvider();
+
+	FString CurrentDesc = ChangelistState->GetDescriptionText().ToString();
+
+	FString ModeStr = (Mode == ECollaborationMode::Multi) ? TEXT("Multi") : TEXT("Solo");
+	FString CreationEntry = FString::Printf(TEXT("\n[Registry Created] Map: %s | Stages: %d | Mode: %s"),
+		*MapName, StageCount, *ModeStr);
+
+	if (CurrentDesc.Contains(CreationEntry))
+	{
+		UE_LOG(LogStageEditorSubsystem, Verbose, TEXT("AppendRegistryCreationToChangelist: Entry already exists"));
+		return;
+	}
+
+	FString NewDesc = CurrentDesc + CreationEntry;
+
+	TSharedRef<FEditChangelist> EditOp = ISourceControlOperation::Create<FEditChangelist>();
+	EditOp->SetDescription(FText::FromString(NewDesc));
+
+	ECommandResult::Type Result = SCProvider.Execute(EditOp, ChangelistState->GetChangelist());
+	if (Result == ECommandResult::Succeeded)
+	{
+		UE_LOG(LogStageEditorSubsystem, Log, TEXT("AppendRegistryCreationToChangelist: Map=%s, Stages=%d, Mode=%s"),
+			*MapName, StageCount, *ModeStr);
+	}
+	else
+	{
+		UE_LOG(LogStageEditorSubsystem, Warning, TEXT("AppendRegistryCreationToChangelist: Failed to update description"));
 	}
 }
 

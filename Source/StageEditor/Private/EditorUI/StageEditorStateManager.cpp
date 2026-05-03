@@ -197,9 +197,22 @@ void FStageEditorStateManager::RefreshSyncStatusText()
 	FRegistrySyncStatus SyncStatus = Controller->GetCachedSyncStatus(World, Registry);
 	CachedSyncStatusText = SyncStatus.GetDisplayText();
 
+	// Compute button text and tooltip from the same cached SyncStatus
+	int32 ReconcileCount = SyncStatus.GetPendingReconciliationCount();
+	if (ReconcileCount > 0)
+	{
+		CachedSyncButtonText = FText::Format(NSLOCTEXT("StageEditor", "ReconcileStages", "Reconcile {0} Stage(s)"), FText::AsNumber(ReconcileCount));
+		CachedSyncButtonTooltip = NSLOCTEXT("StageEditor", "ReconcileStages_Tooltip", "Convert temporary IDs to real IDs for offline-created Stages");
+	}
+	else
+	{
+		CachedSyncButtonText = NSLOCTEXT("StageEditor", "SyncRegistry", "Sync Registry");
+		CachedSyncButtonTooltip = NSLOCTEXT("StageEditor", "SyncRegistry_Tooltip", "Assign IDs to pending Stages and remove orphaned Registry entries");
+	}
+
 	// Update sync warning visibility
 	// Only show in Multi mode when there are out-of-sync Stages
-	CachedSyncWarningVisibility = (Registry->GetCollaborationMode() == ECollaborationMode::Multi && !SyncStatus.IsSynced())
+	CachedSyncWarningVisibility = (!SyncStatus.IsSynced())
 		? EVisibility::Visible
 		: EVisibility::Collapsed;
 }
