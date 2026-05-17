@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #pragma region Imports
 #include "CoreMinimal.h"
@@ -32,6 +32,12 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnActiveActsChanged);
 
 /** Broadcast when any Entity's state changes within this Stage. */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnStageEntityStateChanged, int32, EntityID, int32, OldState, int32, NewState);
+
+/** Broadcast when an Act's DataLayer finishes loading. @param ActID The Act whose DataLayer loaded. */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnActActivatedComplete, int32, ActID);
+
+/** Broadcast when an Act's DataLayer finishes unloading. @param ActID The Act whose DataLayer unloaded. */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnActDataLayerUnloadComplete, int32, ActID);
 
 /**
  * @brief The "Director" of the stage.
@@ -70,6 +76,12 @@ protected:
 	 * @brief Called when the game starts or when spawned.
 	 */
 	virtual void BeginPlay() override;
+
+	/**
+	 * @brief Called when actor is destroyed or play ends.
+	 * Cleans up WP streaming delegate bindings and pending timers.
+	 */
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	/**
 	 * @brief Called when actor is constructed (editor and runtime).
@@ -404,6 +416,9 @@ public:
 	UPROPERTY(Transient)
 	TSet<int32> LockedActIDs;
 
+	/** Entities waiting for BeginPlay before firing load-complete delegate. */
+	TSet<int32> PendingReadyEntities;
+
 	//----------------------------------------------------------------
 	// State Lock API (for Subsystem/external control)
 	//----------------------------------------------------------------
@@ -493,13 +508,13 @@ protected:
 	 * @brief Called when Stage DataLayer finishes loading (async callback).
 	 * Transitions from Preloading to Loaded.
 	 */
-	void OnStageDataLayerLoaded();
+	void HandleStageDataLayerLoaded();
 
 	/**
 	 * @brief Called when Stage DataLayer finishes unloading (async callback).
 	 * Transitions from Unloading to Unloaded.
 	 */
-	void OnStageDataLayerUnloaded();
+	void HandleStageDataLayerUnloaded();
 
 	/**
 	 * @brief Applies state to Acts that have bFollowStageState=true.
@@ -524,6 +539,11 @@ protected:
 	 * and will restore to that state when parent reloads.
 	 */
 	void UnloadAllActDataLayers();
+
+	public:
+		/** Called by StageEntityComponent::BeginPlay to notify Stage that an Entity is ready. */
+		void OnEntityReady(int32 EntityID);
+
 
 public:
 	//----------------------------------------------------------------
@@ -690,6 +710,25 @@ public:
 	 */
 	UFUNCTION(BlueprintImplementableEvent, Category = "StageEditor|Events", meta = (DisplayName = "On Stage Entity State Changed"))
 	void ReceiveOnStageEntityStateChanged(int32 EntityID, int32 OldState, int32 NewState);
+
+	//----------------------------------------------------------------
+	// DataLayer Load/Unload Complete Events
+	//----------------------------------------------------------------
+
+	/** Broadcast when an Act finishes activation and all its Entities are ready. @param ActID The Act that activated. */
+	UPROPERTY(BlueprintAssignable, Category = "StageEditor|Events")
+	FOnActActivatedComplete OnActActivatedComplete;
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "StageEditor|Events", meta = (DisplayName = "On Act Activated Complete"))
+	void ReceiveOnActActivatedComplete(int32 ActID);
+
+	/** Broadcast when an Act's DataLayer finishes unloading. @param ActID The Act whose DataLayer unloaded. */
+	UPROPERTY(BlueprintAssignable, Category = "StageEditor|Events")
+	FOnActDataLayerUnloadComplete OnActDataLayerUnloadComplete;
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "StageEditor|Events", meta = (DisplayName = "On Act Data Layer Unload Complete"))
+	void ReceiveOnActDataLayerUnloadComplete(int32 ActID);
+
 #pragma endregion Events
 
 #pragma region Runtime Logic

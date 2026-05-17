@@ -33,8 +33,8 @@ void AStage::PostLoad()
 
 	// Debug: Log entry
 	UE_LOG(LogStage, Log, TEXT("[PostLoad] Stage '%s' - SUID.StageID=%d, StageDataLayerAsset=%s"),
-		*GetActorLabel(), SUID.StageID,
-		StageDataLayerAsset ? *StageDataLayerAsset->GetName() : TEXT("null"));
+	       *GetActorLabel(), SUID.StageID,
+	       StageDataLayerAsset ? *StageDataLayerAsset->GetName() : TEXT("null"));
 
 	// Notify RuntimeSubsystem that Stage has been loaded
 	// EditorSubsystem will listen and handle registration logic
@@ -121,8 +121,8 @@ void AStage::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
 	// For struct properties (like FVector), we need to check MemberProperty
 	// GetPropertyName() returns "X"/"Y"/"Z", but MemberProperty gives us "LoadZoneExtent"
 	const FName MemberPropertyName = PropertyChangedEvent.MemberProperty
-		? PropertyChangedEvent.MemberProperty->GetFName()
-		: PropertyName;
+		                                 ? PropertyChangedEvent.MemberProperty->GetFName()
+		                                 : PropertyName;
 
 	// If StageDataLayerAsset changes, sync the display name
 	if (PropertyName == GET_MEMBER_NAME_CHECKED(AStage, StageDataLayerAsset))
@@ -202,7 +202,7 @@ void AStage::PostEditImport()
 	}
 
 	UE_LOG(LogTemp, Warning, TEXT("PostEditImport: Cleared stale data on duplicated Stage '%s'. "
-		"Please re-register this Stage through StageEditorPanel."), *OriginalName);
+		       "Please re-register this Stage through StageEditorPanel."), *OriginalName);
 }
 #endif
 
@@ -222,7 +222,9 @@ void AStage::UpdateBuiltInZoneVisibility()
 		const bool bShouldBeVisible = !bDisableBuiltInZones && BuiltInLoadZone->bComponentVisible;
 		BuiltInLoadZone->SetVisibility(bShouldBeVisible);
 		BuiltInLoadZone->SetHiddenInGame(!bShouldBeVisible);
-		BuiltInLoadZone->SetCollisionEnabled(bDisableBuiltInZones ? ECollisionEnabled::NoCollision : ECollisionEnabled::QueryOnly);
+		BuiltInLoadZone->SetCollisionEnabled(bDisableBuiltInZones
+			                                     ? ECollisionEnabled::NoCollision
+			                                     : ECollisionEnabled::QueryOnly);
 	}
 
 	if (BuiltInActivateZone)
@@ -230,7 +232,9 @@ void AStage::UpdateBuiltInZoneVisibility()
 		const bool bShouldBeVisible = !bDisableBuiltInZones && BuiltInActivateZone->bComponentVisible;
 		BuiltInActivateZone->SetVisibility(bShouldBeVisible);
 		BuiltInActivateZone->SetHiddenInGame(!bShouldBeVisible);
-		BuiltInActivateZone->SetCollisionEnabled(bDisableBuiltInZones ? ECollisionEnabled::NoCollision : ECollisionEnabled::QueryOnly);
+		BuiltInActivateZone->SetCollisionEnabled(bDisableBuiltInZones
+			                                         ? ECollisionEnabled::NoCollision
+			                                         : ECollisionEnabled::QueryOnly);
 	}
 }
 
@@ -246,7 +250,7 @@ void AStage::BeginPlay()
 		{
 			Subsystem->RegisterStage(this);
 			UE_LOG(LogStage, Log, TEXT("Stage [%s]: Registered with StageManagerSubsystem (ID: %d)"),
-				*GetName(), GetStageID());
+			       *GetName(), GetStageID());
 		}
 	}
 
@@ -258,7 +262,7 @@ void AStage::BeginPlay()
 	{
 		// Built-in zones disabled - apply InitialStageState directly
 		UE_LOG(LogStage, Log, TEXT("Stage [%s]: Built-in zones disabled, applying InitialStageState: %d"),
-			*GetName(), (int32)InitialStageState);
+		       *GetName(), (int32)InitialStageState);
 
 		if (InitialStageState != EStageRuntimeState::Unloaded)
 		{
@@ -275,8 +279,17 @@ void AStage::BeginPlay()
 		GetWorld()->GetTimerManager().SetTimerForNextTick(this, &AStage::CheckInitialOverlaps);
 	}
 
+
 	// Note: Act InitialDataLayerState is applied in OnEnterState(Active)
 	// when Stage transitions to Active state (via TriggerZone or InitialStageState)
+}
+
+//----------------------------------------------------------------
+
+void AStage::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	PendingReadyEntities.Empty();
+	Super::EndPlay(EndPlayReason);
 }
 
 //----------------------------------------------------------------
@@ -295,13 +308,14 @@ void AStage::InternalGotoState(EStageRuntimeState NewState)
 	// If locked, only allow transition to the locked state (for ForceStageStateOverride)
 	if (bIsStageStateLocked && NewState != LockedStageState)
 	{
-		UE_LOG(LogStage, Warning, TEXT("Stage [%s]: State transition blocked by lock. Locked to state %d, requested %d"),
-			*GetName(), (int32)LockedStageState, (int32)NewState);
+		UE_LOG(LogStage, Warning,
+		       TEXT("Stage [%s]: State transition blocked by lock. Locked to state %d, requested %d"),
+		       *GetName(), (int32)LockedStageState, (int32)NewState);
 		return;
 	}
 
 	UE_LOG(LogStage, Log, TEXT("Stage [%s]: State transition %d -> %d"),
-		*GetName(), (int32)CurrentStageState, (int32)NewState);
+	       *GetName(), (int32)CurrentStageState, (int32)NewState);
 
 	// Exit current state
 	OnExitState(CurrentStageState);
@@ -328,14 +342,9 @@ void AStage::OnEnterState(EStageRuntimeState State)
 		if (StageDataLayerAsset)
 		{
 			SetStageDataLayerState(EDataLayerRuntimeState::Loaded);
-			// For now, assume immediate completion. TODO: Add async callback support
-			OnStageDataLayerLoaded();
 		}
-		else
-		{
-			// No DataLayer, skip to Loaded
-			OnStageDataLayerLoaded();
-		}
+		// Proceed to Loaded state - entity readiness tracked per-Act
+		HandleStageDataLayerLoaded();
 		break;
 
 	case EStageRuntimeState::Loaded:
@@ -372,13 +381,9 @@ void AStage::OnEnterState(EStageRuntimeState State)
 		if (StageDataLayerAsset)
 		{
 			SetStageDataLayerState(EDataLayerRuntimeState::Unloaded);
-			// For now, assume immediate completion. TODO: Add async callback support
-			OnStageDataLayerUnloaded();
 		}
-		else
-		{
-			OnStageDataLayerUnloaded();
-		}
+		// Proceed to Unloaded state
+		HandleStageDataLayerUnloaded();
 		break;
 	}
 }
@@ -389,7 +394,7 @@ void AStage::OnExitState(EStageRuntimeState State)
 	// Reserved for future use
 }
 
-void AStage::OnStageDataLayerLoaded()
+void AStage::HandleStageDataLayerLoaded()
 {
 	if (CurrentStageState == EStageRuntimeState::Preloading)
 	{
@@ -397,7 +402,7 @@ void AStage::OnStageDataLayerLoaded()
 	}
 }
 
-void AStage::OnStageDataLayerUnloaded()
+void AStage::HandleStageDataLayerUnloaded()
 {
 	if (CurrentStageState == EStageRuntimeState::Unloading)
 	{
@@ -407,7 +412,8 @@ void AStage::OnStageDataLayerUnloaded()
 
 void AStage::ApplyFollowingActStates(EDataLayerRuntimeState TargetState)
 {
-	UE_LOG(LogStage, Log, TEXT("Stage [%s]: Applying FollowStageState for Acts (TargetState=%d)"), *GetName(), (int32)TargetState);
+	UE_LOG(LogStage, Log, TEXT("Stage [%s]: Applying FollowStageState for Acts (TargetState=%d)"), *GetName(),
+	       (int32)TargetState);
 
 	for (const FAct& Act : Acts)
 	{
@@ -427,7 +433,7 @@ void AStage::ApplyFollowingActStates(EDataLayerRuntimeState TargetState)
 			{
 				ActivateAct(ActID);
 				UE_LOG(LogStage, Log, TEXT("Stage [%s]: Act '%s' (ID:%d) activated (FollowStageState)"),
-					*GetName(), *Act.DisplayName, ActID);
+				       *GetName(), *Act.DisplayName, ActID);
 			}
 			break;
 
@@ -437,7 +443,7 @@ void AStage::ApplyFollowingActStates(EDataLayerRuntimeState TargetState)
 			{
 				SetActDataLayerState(ActID, EDataLayerRuntimeState::Loaded);
 				UE_LOG(LogStage, Log, TEXT("Stage [%s]: Act '%s' (ID:%d) DataLayer preloaded (FollowStageState)"),
-					*GetName(), *Act.DisplayName, ActID);
+				       *GetName(), *Act.DisplayName, ActID);
 			}
 			break;
 
@@ -453,7 +459,7 @@ void AStage::ApplyFollowingActStates(EDataLayerRuntimeState TargetState)
 				SetActDataLayerState(ActID, EDataLayerRuntimeState::Unloaded);
 			}
 			UE_LOG(LogStage, Log, TEXT("Stage [%s]: Act '%s' (ID:%d) unloaded (FollowStageState)"),
-				*GetName(), *Act.DisplayName, ActID);
+			       *GetName(), *Act.DisplayName, ActID);
 			break;
 		}
 	}
@@ -481,7 +487,7 @@ void AStage::ApplyInitialActDataLayerStates()
 			{
 				ActivateAct(ActID);
 				UE_LOG(LogStage, Log, TEXT("Stage [%s]: Act '%s' (ID:%d) activated (InitialDataLayerState=Activated)"),
-					*GetName(), *Act.DisplayName, ActID);
+				       *GetName(), *Act.DisplayName, ActID);
 			}
 			break;
 
@@ -490,16 +496,18 @@ void AStage::ApplyInitialActDataLayerStates()
 			if (Act.AssociatedDataLayer)
 			{
 				SetActDataLayerState(ActID, EDataLayerRuntimeState::Loaded);
-				UE_LOG(LogStage, Log, TEXT("Stage [%s]: Act '%s' (ID:%d) DataLayer preloaded (InitialDataLayerState=Loaded)"),
-					*GetName(), *Act.DisplayName, ActID);
+				UE_LOG(LogStage, Log,
+				       TEXT("Stage [%s]: Act '%s' (ID:%d) DataLayer preloaded (InitialDataLayerState=Loaded)"),
+				       *GetName(), *Act.DisplayName, ActID);
 			}
 			break;
 
 		case EDataLayerRuntimeState::Unloaded:
 		default:
 			// Keep unloaded, wait for explicit ActivateAct() call
-			UE_LOG(LogStage, Verbose, TEXT("Stage [%s]: Act '%s' (ID:%d) remains unloaded (InitialDataLayerState=Unloaded)"),
-				*GetName(), *Act.DisplayName, ActID);
+			UE_LOG(LogStage, Verbose,
+			       TEXT("Stage [%s]: Act '%s' (ID:%d) remains unloaded (InitialDataLayerState=Unloaded)"),
+			       *GetName(), *Act.DisplayName, ActID);
 			break;
 		}
 	}
@@ -524,7 +532,7 @@ void AStage::UnloadAllActDataLayers()
 		{
 			SetActDataLayerState(ActID, EDataLayerRuntimeState::Unloaded);
 			UE_LOG(LogStage, Log, TEXT("Stage [%s]: Act '%s' (ID:%d) DataLayer unloaded"),
-				*GetName(), *Act.DisplayName, ActID);
+			       *GetName(), *Act.DisplayName, ActID);
 		}
 	}
 }
@@ -532,13 +540,13 @@ void AStage::UnloadAllActDataLayers()
 bool AStage::IsInTransitionState() const
 {
 	return CurrentStageState == EStageRuntimeState::Preloading ||
-	       CurrentStageState == EStageRuntimeState::Unloading;
+		CurrentStageState == EStageRuntimeState::Unloading;
 }
 
 bool AStage::IsStageLoaded() const
 {
 	return CurrentStageState == EStageRuntimeState::Loaded ||
-	       CurrentStageState == EStageRuntimeState::Active;
+		CurrentStageState == EStageRuntimeState::Active;
 }
 
 //----------------------------------------------------------------
@@ -548,7 +556,7 @@ bool AStage::IsStageLoaded() const
 void AStage::ForceStageStateOverride(EStageRuntimeState NewState, bool bLockState)
 {
 	UE_LOG(LogStage, Log, TEXT("Stage [%s]: ForceStageStateOverride to %d (Lock: %s)"),
-		*GetName(), (int32)NewState, bLockState ? TEXT("true") : TEXT("false"));
+	       *GetName(), (int32)NewState, bLockState ? TEXT("true") : TEXT("false"));
 
 	// If we're going to lock to this state, set the lock first
 	if (bLockState)
@@ -603,7 +611,7 @@ void AStage::ReleaseStageStateOverride()
 	{
 		// No one in LoadZone -> should be Unloaded or Unloading
 		if (CurrentStageState == EStageRuntimeState::Loaded ||
-		    CurrentStageState == EStageRuntimeState::Active)
+			CurrentStageState == EStageRuntimeState::Active)
 		{
 			InternalGotoState(EStageRuntimeState::Unloading);
 		}
@@ -689,7 +697,9 @@ void AStage::InitializeTriggerZones()
 	}
 	else
 	{
-		UE_LOG(LogStage, Warning, TEXT("Stage [%s]: Built-in TriggerZones disabled. Make sure external zones are configured!"), *GetName());
+		UE_LOG(LogStage, Warning,
+		       TEXT("Stage [%s]: Built-in TriggerZones disabled. Make sure external zones are configured!"),
+		       *GetName());
 	}
 
 	// 2. Process external zones
@@ -709,25 +719,27 @@ void AStage::InitializeTriggerZones()
 			}
 
 			UE_LOG(LogStage, Log, TEXT("Stage [%s]: Bound external %s '%s'"),
-				*GetName(),
-				Zone->ZoneType == EStageTriggerZoneType::LoadZone ? TEXT("LoadZone") : TEXT("ActivateZone"),
-				*Zone->GetName());
+			       *GetName(),
+			       Zone->ZoneType == EStageTriggerZoneType::LoadZone ? TEXT("LoadZone") : TEXT("ActivateZone"),
+			       *Zone->GetName());
 		}
 	}
 
 	// 3. Validation
 	if (RegisteredLoadZones.Num() == 0)
 	{
-		UE_LOG(LogStage, Error, TEXT("Stage [%s]: No LoadZone registered! State machine will not work properly."), *GetName());
+		UE_LOG(LogStage, Error, TEXT("Stage [%s]: No LoadZone registered! State machine will not work properly."),
+		       *GetName());
 	}
 
 	if (RegisteredActivateZones.Num() == 0)
 	{
-		UE_LOG(LogStage, Warning, TEXT("Stage [%s]: No ActivateZone registered. Stage will only transition to Loaded state."), *GetName());
+		UE_LOG(LogStage, Warning,
+		       TEXT("Stage [%s]: No ActivateZone registered. Stage will only transition to Loaded state."), *GetName());
 	}
 
 	UE_LOG(LogStage, Log, TEXT("Stage [%s]: TriggerZones initialized. LoadZones: %d, ActivateZones: %d"),
-		*GetName(), RegisteredLoadZones.Num(), RegisteredActivateZones.Num());
+	       *GetName(), RegisteredLoadZones.Num(), RegisteredActivateZones.Num());
 }
 
 void AStage::CheckInitialOverlaps()
@@ -774,8 +786,9 @@ void AStage::CheckInitialOverlaps()
 		}
 	}
 
-	UE_LOG(LogStage, Log, TEXT("Stage [%s]: CheckInitialOverlaps complete. State: %d, LoadZoneActors: %d, ActivateZoneActors: %d"),
-		*GetName(), (int32)CurrentStageState, OverlappingLoadZoneActors.Num(), OverlappingActivateZoneActors.Num());
+	UE_LOG(LogStage, Log,
+	       TEXT("Stage [%s]: CheckInitialOverlaps complete. State: %d, LoadZoneActors: %d, ActivateZoneActors: %d"),
+	       *GetName(), (int32)CurrentStageState, OverlappingLoadZoneActors.Num(), OverlappingActivateZoneActors.Num());
 }
 
 void AStage::HandleZoneBeginOverlap(UStageTriggerZoneComponent* Zone, AActor* OtherActor)
@@ -788,7 +801,7 @@ void AStage::HandleZoneBeginOverlap(UStageTriggerZoneComponent* Zone, AActor* Ot
 		OverlappingLoadZoneActors.Add(OtherActor);
 
 		UE_LOG(LogStage, Log, TEXT("Stage [%s]: Actor '%s' entered LoadZone (count: %d)"),
-			*GetName(), *OtherActor->GetName(), OverlappingLoadZoneActors.Num());
+		       *GetName(), *OtherActor->GetName(), OverlappingLoadZoneActors.Num());
 
 		// First actor entering LoadZone triggers loading
 		if (OverlappingLoadZoneActors.Num() == 1)
@@ -805,7 +818,7 @@ void AStage::HandleZoneBeginOverlap(UStageTriggerZoneComponent* Zone, AActor* Ot
 		OverlappingActivateZoneActors.Add(OtherActor);
 
 		UE_LOG(LogStage, Log, TEXT("Stage [%s]: Actor '%s' entered ActivateZone (count: %d)"),
-			*GetName(), *OtherActor->GetName(), OverlappingActivateZoneActors.Num());
+		       *GetName(), *OtherActor->GetName(), OverlappingActivateZoneActors.Num());
 
 		// First actor entering ActivateZone triggers activation
 		if (OverlappingActivateZoneActors.Num() == 1)
@@ -830,13 +843,13 @@ void AStage::HandleZoneEndOverlap(UStageTriggerZoneComponent* Zone, AActor* Othe
 		OverlappingActivateZoneActors.Remove(OtherActor);
 
 		UE_LOG(LogStage, Log, TEXT("Stage [%s]: Actor '%s' left LoadZone (count: %d)"),
-			*GetName(), *OtherActor->GetName(), OverlappingLoadZoneActors.Num());
+		       *GetName(), *OtherActor->GetName(), OverlappingLoadZoneActors.Num());
 
 		// Last actor leaving LoadZone triggers unloading
 		if (OverlappingLoadZoneActors.Num() == 0)
 		{
 			if (CurrentStageState == EStageRuntimeState::Loaded ||
-			    CurrentStageState == EStageRuntimeState::Active)
+				CurrentStageState == EStageRuntimeState::Active)
 			{
 				InternalGotoState(EStageRuntimeState::Unloading);
 			}
@@ -848,7 +861,7 @@ void AStage::HandleZoneEndOverlap(UStageTriggerZoneComponent* Zone, AActor* Othe
 		OverlappingActivateZoneActors.Remove(OtherActor);
 
 		UE_LOG(LogStage, Log, TEXT("Stage [%s]: Actor '%s' left ActivateZone (count: %d)"),
-			*GetName(), *OtherActor->GetName(), OverlappingActivateZoneActors.Num());
+		       *GetName(), *OtherActor->GetName(), OverlappingActivateZoneActors.Num());
 
 		// Design decision: Stay Active even when leaving ActivateZone (until leaving LoadZone)
 		// This prevents flickering when player is on the ActivateZone boundary
@@ -870,7 +883,8 @@ void AStage::ActivateAct(int32 ActID)
 	}
 
 	// Find the Act for logging and DataLayer access
-	const FAct* TargetAct = Acts.FindByPredicate([ActID](const FAct& Act) {
+	const FAct* TargetAct = Acts.FindByPredicate([ActID](const FAct& Act)
+	{
 		return Act.SUID.ActID == ActID;
 	});
 
@@ -891,19 +905,51 @@ void AStage::ActivateAct(int32 ActID)
 		SetActDataLayerState(ActID, EDataLayerRuntimeState::Activated);
 	}
 
-	// 6. Apply this Act's EntityState overrides
+	// 6. Track entity readiness for this Act
+	{
+			PendingReadyEntities.Empty();
+			for (const auto& Pair : TargetAct->EntityStateOverrides)
+		{
+			int32 EntityID = Pair.Key;
+			AActor* Entity = GetEntityByID(EntityID);
+			UStageEntityComponent* Comp = Entity ? Entity->FindComponentByClass<UStageEntityComponent>() : nullptr;
+			// Actor not loaded or not yet begun play -> must wait
+			UE_LOG(LogStage, Warning, TEXT("[EntityCheck] ActID=%d EntityID=%d Actor=%s Comp=%s BegunPlay=%d"),
+			       ActID, EntityID, Entity ? *Entity->GetName() : TEXT("NULL"), Comp ? TEXT("YES") : TEXT("NO"),
+			       Comp ? (int32)Comp->bHasBegunPlay : -1);
+			PendingReadyEntities.Add(EntityID);
+		}
+	}
+
+	// 7. Apply this Act's EntityState overrides
 	ApplyActEntityStatesOnly(ActID);
 
-	// 7. Update CurrentDataLayer
+	// 8. Update CurrentDataLayer
 	CurrentDataLayer = TargetAct->AssociatedDataLayer;
 
-	// 8. Broadcast events (delegates for C++ binding)
+	// 9. Broadcast events (delegates for C++ binding)
 	OnActActivated.Broadcast(ActID);
 	OnActiveActsChanged.Broadcast();
 
-	// 9. Call BlueprintImplementableEvents (for Blueprint override)
+	// 10. Call BlueprintImplementableEvents (for Blueprint override)
 	ReceiveOnActActivated(ActID);
 	ReceiveOnActiveActsChanged();
+
+	// If all entities already ready, broadcast completion immediately
+	if (PendingReadyEntities.Num() == 0)
+	{
+		OnActActivatedComplete.Broadcast(ActID);
+		ReceiveOnActActivatedComplete(ActID);
+
+		// Notify each Entity that the Act is ready
+		for (const auto& Pair : TargetAct->EntityStateOverrides)
+		{
+			if (UStageEntityComponent* Comp = GetEntityComponentByID(Pair.Key))
+			{
+				Comp->OnActActivatedComplete.Broadcast(ActID);
+			}
+		}
+	}
 }
 
 void AStage::DeactivateAct(int32 ActID)
@@ -923,7 +969,8 @@ void AStage::DeactivateAct(int32 ActID)
 	}
 
 	// Find Act for logging
-	const FAct* TargetAct = Acts.FindByPredicate([ActID](const FAct& Act) {
+	const FAct* TargetAct = Acts.FindByPredicate([ActID](const FAct& Act)
+	{
 		return Act.SUID.ActID == ActID;
 	});
 
@@ -942,7 +989,8 @@ void AStage::DeactivateAct(int32 ActID)
 	if (ActiveActIDs.Num() > 0)
 	{
 		int32 HighestPriorityActID = ActiveActIDs.Last();
-		const FAct* HighestAct = Acts.FindByPredicate([HighestPriorityActID](const FAct& Act) {
+		const FAct* HighestAct = Acts.FindByPredicate([HighestPriorityActID](const FAct& Act)
+		{
 			return Act.SUID.ActID == HighestPriorityActID;
 		});
 		CurrentDataLayer = HighestAct ? HighestAct->AssociatedDataLayer : nullptr;
@@ -984,7 +1032,7 @@ void AStage::DeactivateAllActs()
 	if (ActiveActIDs.Num() > 0)
 	{
 		UE_LOG(LogStage, Log, TEXT("Stage [%s]: DeactivateAllActs - %d Acts remain active due to locks"),
-			*GetName(), ActiveActIDs.Num());
+		       *GetName(), ActiveActIDs.Num());
 	}
 }
 
@@ -1012,7 +1060,8 @@ int32 AStage::GetEffectiveEntityState(int32 EntityID) const
 	for (int32 i = ActiveActIDs.Num() - 1; i >= 0; --i)
 	{
 		int32 ActID = ActiveActIDs[i];
-		const FAct* Act = Acts.FindByPredicate([ActID](const FAct& A) {
+		const FAct* Act = Acts.FindByPredicate([ActID](const FAct& A)
+		{
 			return A.SUID.ActID == ActID;
 		});
 
@@ -1035,7 +1084,8 @@ int32 AStage::GetControllingActForEntity(int32 EntityID) const
 	for (int32 i = ActiveActIDs.Num() - 1; i >= 0; --i)
 	{
 		int32 ActID = ActiveActIDs[i];
-		const FAct* Act = Acts.FindByPredicate([ActID](const FAct& A) {
+		const FAct* Act = Acts.FindByPredicate([ActID](const FAct& A)
+		{
 			return A.SUID.ActID == ActID;
 		});
 
@@ -1056,9 +1106,9 @@ int32 AStage::RegisterEntity(AActor* NewEntity)
 	if (NewEntity->IsA<AStage>())
 	{
 		UE_LOG(LogTemp, Error,
-			TEXT("Stage [%s]: Cannot register Stage actor '%s' as a Entity! "
-			     "Stage actors cannot be nested. This is a dangerous operation."),
-			*GetName(), *NewEntity->GetName());
+		       TEXT("Stage [%s]: Cannot register Stage actor '%s' as a Entity! "
+			       "Stage actors cannot be nested. This is a dangerous operation."),
+		       *GetName(), *NewEntity->GetName());
 		return -1;
 	}
 
@@ -1066,7 +1116,8 @@ int32 AStage::RegisterEntity(AActor* NewEntity)
 	UStageEntityComponent* EntityComponent = NewEntity->FindComponentByClass<UStageEntityComponent>();
 	if (!EntityComponent)
 	{
-		UE_LOG(LogTemp, Error, TEXT("Stage [%s]: Cannot register Entity '%s' - no UStageEntityComponent found!"), *GetName(), *NewEntity->GetName());
+		UE_LOG(LogTemp, Error, TEXT("Stage [%s]: Cannot register Entity '%s' - no UStageEntityComponent found!"),
+		       *GetName(), *NewEntity->GetName());
 		return -1;
 	}
 
@@ -1093,7 +1144,8 @@ int32 AStage::RegisterEntity(AActor* NewEntity)
 	EntityComponent->SUID.EntityID = NewID; // Sync Entity ID to Entity Component
 	EntityComponent->OwnerStage = this; // Set owner stage reference
 
-	UE_LOG(LogTemp, Log, TEXT("Stage [%s]: Registered Entity '%s' with ID %d"), *GetName(), *NewEntity->GetName(), NewID);
+	UE_LOG(LogTemp, Log, TEXT("Stage [%s]: Registered Entity '%s' with ID %d"), *GetName(), *NewEntity->GetName(),
+	       NewID);
 	return NewID;
 }
 
@@ -1101,32 +1153,35 @@ void AStage::UnregisterEntity(int32 EntityID)
 {
 	// Remove from EntityRegistry
 	EntityRegistry.Remove(EntityID);
-	
+
 	// Clean up EntityStateOverrides from ALL Acts
 	for (FAct& Act : Acts)
 	{
 		Act.EntityStateOverrides.Remove(EntityID);
 	}
-	
+
 	UE_LOG(LogTemp, Log, TEXT("Stage [%s]: Unregistered Entity ID %d from Stage and all Acts"), *GetName(), EntityID);
 }
 
 void AStage::RemoveEntityFromAct(int32 EntityID, int32 ActID)
 {
 	// Find the Act
-	FAct* TargetAct = Acts.FindByPredicate([ActID](const FAct& Act) {
+	FAct* TargetAct = Acts.FindByPredicate([ActID](const FAct& Act)
+	{
 		return Act.SUID.ActID == ActID;
 	});
-	
+
 	if (TargetAct)
 	{
 		if (TargetAct->EntityStateOverrides.Remove(EntityID) > 0)
 		{
-			UE_LOG(LogTemp, Log, TEXT("Stage [%s]: Removed Entity ID %d from Act '%s'"), *GetName(), EntityID, *TargetAct->DisplayName);
+			UE_LOG(LogTemp, Log, TEXT("Stage [%s]: Removed Entity ID %d from Act '%s'"), *GetName(), EntityID,
+			       *TargetAct->DisplayName);
 		}
 		else
 		{
-			UE_LOG(LogTemp, Warning, TEXT("Stage [%s]: Entity ID %d not found in Act '%s'"), *GetName(), EntityID, *TargetAct->DisplayName);
+			UE_LOG(LogTemp, Warning, TEXT("Stage [%s]: Entity ID %d not found in Act '%s'"), *GetName(), EntityID,
+			       *TargetAct->DisplayName);
 		}
 	}
 	else
@@ -1138,10 +1193,11 @@ void AStage::RemoveEntityFromAct(int32 EntityID, int32 ActID)
 void AStage::RemoveAct(int32 ActID)
 {
 	// Find and remove the Act
-	int32 RemovedCount = Acts.RemoveAll([ActID](const FAct& Act) {
+	int32 RemovedCount = Acts.RemoveAll([ActID](const FAct& Act)
+	{
 		return Act.SUID.ActID == ActID;
 	});
-	
+
 	if (RemovedCount > 0)
 	{
 		UE_LOG(LogTemp, Log, TEXT("Stage [%s]: Removed Act ID %d"), *GetName(), ActID);
@@ -1168,7 +1224,8 @@ AActor* AStage::GetEntityByID(int32 EntityID) const
 bool AStage::SetActDataLayerState(int32 ActID, EDataLayerRuntimeState NewState)
 {
 	// Find the Act
-	const FAct* TargetAct = Acts.FindByPredicate([ActID](const FAct& Act) {
+	const FAct* TargetAct = Acts.FindByPredicate([ActID](const FAct& Act)
+	{
 		return Act.SUID.ActID == ActID;
 	});
 
@@ -1180,14 +1237,16 @@ bool AStage::SetActDataLayerState(int32 ActID, EDataLayerRuntimeState NewState)
 
 	if (!TargetAct->AssociatedDataLayer)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Stage [%s]: SetActDataLayerState - Act '%s' has no associated DataLayer."), *GetName(), *TargetAct->DisplayName);
+		UE_LOG(LogTemp, Warning, TEXT("Stage [%s]: SetActDataLayerState - Act '%s' has no associated DataLayer."),
+		       *GetName(), *TargetAct->DisplayName);
 		return false;
 	}
 
 	UDataLayerManager* DataLayerManager = UDataLayerManager::GetDataLayerManager(GetWorld());
 	if (!DataLayerManager)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Stage [%s]: SetActDataLayerState - DataLayerManager not available."), *GetName());
+		UE_LOG(LogTemp, Warning, TEXT("Stage [%s]: SetActDataLayerState - DataLayerManager not available."),
+		       *GetName());
 		return false;
 	}
 
@@ -1196,7 +1255,7 @@ bool AStage::SetActDataLayerState(int32 ActID, EDataLayerRuntimeState NewState)
 	if (bSuccess)
 	{
 		UE_LOG(LogTemp, Log, TEXT("Stage [%s]: Set Act '%s' DataLayer '%s' to state %d"),
-			*GetName(), *TargetAct->DisplayName, *TargetAct->AssociatedDataLayer->GetName(), (int32)NewState);
+		       *GetName(), *TargetAct->DisplayName, *TargetAct->AssociatedDataLayer->GetName(), (int32)NewState);
 	}
 
 	return bSuccess;
@@ -1205,7 +1264,8 @@ bool AStage::SetActDataLayerState(int32 ActID, EDataLayerRuntimeState NewState)
 EDataLayerRuntimeState AStage::GetActDataLayerState(int32 ActID) const
 {
 	// Find the Act
-	const FAct* TargetAct = Acts.FindByPredicate([ActID](const FAct& Act) {
+	const FAct* TargetAct = Acts.FindByPredicate([ActID](const FAct& Act)
+	{
 		return Act.SUID.ActID == ActID;
 	});
 
@@ -1221,7 +1281,8 @@ EDataLayerRuntimeState AStage::GetActDataLayerState(int32 ActID) const
 	}
 
 	// Get instance from asset, then query runtime state
-	const UDataLayerInstance* Instance = DataLayerManager->GetDataLayerInstanceFromAsset(TargetAct->AssociatedDataLayer);
+	const UDataLayerInstance* Instance = DataLayerManager->
+		GetDataLayerInstanceFromAsset(TargetAct->AssociatedDataLayer);
 	if (!Instance)
 	{
 		return EDataLayerRuntimeState::Unloaded;
@@ -1250,14 +1311,16 @@ bool AStage::SetStageDataLayerState(EDataLayerRuntimeState NewState)
 {
 	if (!StageDataLayerAsset)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Stage [%s]: SetStageDataLayerState - No Stage DataLayer Asset assigned."), *GetName());
+		UE_LOG(LogTemp, Warning, TEXT("Stage [%s]: SetStageDataLayerState - No Stage DataLayer Asset assigned."),
+		       *GetName());
 		return false;
 	}
 
 	UDataLayerManager* DataLayerManager = UDataLayerManager::GetDataLayerManager(GetWorld());
 	if (!DataLayerManager)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Stage [%s]: SetStageDataLayerState - DataLayerManager not available."), *GetName());
+		UE_LOG(LogTemp, Warning, TEXT("Stage [%s]: SetStageDataLayerState - DataLayerManager not available."),
+		       *GetName());
 		return false;
 	}
 
@@ -1266,7 +1329,7 @@ bool AStage::SetStageDataLayerState(EDataLayerRuntimeState NewState)
 	if (bSuccess)
 	{
 		UE_LOG(LogTemp, Log, TEXT("Stage [%s]: Set Stage DataLayer '%s' to state %d"),
-			*GetName(), *StageDataLayerAsset->GetName(), (int32)NewState);
+		       *GetName(), *StageDataLayerAsset->GetName(), (int32)NewState);
 	}
 
 	return bSuccess;
@@ -1297,7 +1360,8 @@ EDataLayerRuntimeState AStage::GetStageDataLayerState() const
 
 UDataLayerAsset* AStage::GetActDataLayerAsset(int32 ActID) const
 {
-	const FAct* TargetAct = Acts.FindByPredicate([ActID](const FAct& Act) {
+	const FAct* TargetAct = Acts.FindByPredicate([ActID](const FAct& Act)
+	{
 		return Act.SUID.ActID == ActID;
 	});
 
@@ -1315,7 +1379,8 @@ UDataLayerAsset* AStage::GetActDataLayerAsset(int32 ActID) const
 
 bool AStage::ApplyActEntityStatesOnly(int32 ActID)
 {
-	const FAct* TargetAct = Acts.FindByPredicate([ActID](const FAct& Act) {
+	const FAct* TargetAct = Acts.FindByPredicate([ActID](const FAct& Act)
+	{
 		return Act.SUID.ActID == ActID;
 	});
 
@@ -1332,7 +1397,7 @@ bool AStage::ApplyActEntityStatesOnly(int32 ActID)
 	}
 
 	UE_LOG(LogTemp, Log, TEXT("Stage [%s]: Applied EntityStates from Act '%s' (ID:%d) without DataLayer change."),
-		*GetName(), *TargetAct->DisplayName, ActID);
+	       *GetName(), *TargetAct->DisplayName, ActID);
 
 	return true;
 }
@@ -1342,14 +1407,16 @@ bool AStage::SetEntityStateByID(int32 EntityID, int32 NewState, bool bForce)
 	AActor* EntityActor = GetEntityByID(EntityID);
 	if (!EntityActor)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Stage [%s]: SetEntityStateByID - Entity ID %d not found."), *GetName(), EntityID);
+		UE_LOG(LogTemp, Warning, TEXT("Stage [%s]: SetEntityStateByID - Entity ID %d not found."), *GetName(),
+		       EntityID);
 		return false;
 	}
 
 	UStageEntityComponent* EntityComp = EntityActor->FindComponentByClass<UStageEntityComponent>();
 	if (!EntityComp)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Stage [%s]: SetEntityStateByID - Entity '%s' has no UStageEntityComponent."), *GetName(), *EntityActor->GetName());
+		UE_LOG(LogTemp, Warning, TEXT("Stage [%s]: SetEntityStateByID - Entity '%s' has no UStageEntityComponent."),
+		       *GetName(), *EntityActor->GetName());
 		return false;
 	}
 
@@ -1439,7 +1506,8 @@ bool AStage::DoesEntityExist(int32 EntityID) const
 
 FString AStage::GetActDisplayName(int32 ActID) const
 {
-	const FAct* TargetAct = Acts.FindByPredicate([ActID](const FAct& Act) {
+	const FAct* TargetAct = Acts.FindByPredicate([ActID](const FAct& Act)
+	{
 		return Act.SUID.ActID == ActID;
 	});
 
@@ -1453,7 +1521,8 @@ FString AStage::GetActDisplayName(int32 ActID) const
 
 TMap<int32, int32> AStage::GetActEntityStates(int32 ActID) const
 {
-	const FAct* TargetAct = Acts.FindByPredicate([ActID](const FAct& Act) {
+	const FAct* TargetAct = Acts.FindByPredicate([ActID](const FAct& Act)
+	{
 		return Act.SUID.ActID == ActID;
 	});
 
@@ -1477,7 +1546,8 @@ TArray<int32> AStage::GetAllActIDs() const
 
 bool AStage::DoesActExist(int32 ActID) const
 {
-	return Acts.ContainsByPredicate([ActID](const FAct& Act) {
+	return Acts.ContainsByPredicate([ActID](const FAct& Act)
+	{
 		return Act.SUID.ActID == ActID;
 	});
 }
@@ -1496,14 +1566,14 @@ void AStage::RegisterTriggerZone(UTriggerZoneComponentBase* Zone)
 	if (RegisteredTriggerZones.Contains(Zone))
 	{
 		UE_LOG(LogStage, Verbose, TEXT("Stage [%s]: TriggerZone [%s] already registered"),
-			*GetName(), *Zone->GetName());
+		       *GetName(), *Zone->GetName());
 		return;
 	}
 
 	RegisteredTriggerZones.Add(Zone);
 
 	UE_LOG(LogStage, Log, TEXT("Stage [%s]: Registered TriggerZone [%s] (Total: %d)"),
-		*GetName(), *Zone->GetName(), RegisteredTriggerZones.Num());
+	       *GetName(), *Zone->GetName(), RegisteredTriggerZones.Num());
 }
 
 void AStage::UnregisterTriggerZone(UTriggerZoneComponentBase* Zone)
@@ -1516,7 +1586,7 @@ void AStage::UnregisterTriggerZone(UTriggerZoneComponentBase* Zone)
 	if (RegisteredTriggerZones.Remove(Zone) > 0)
 	{
 		UE_LOG(LogStage, Log, TEXT("Stage [%s]: Unregistered TriggerZone [%s] (Remaining: %d)"),
-			*GetName(), *Zone->GetName(), RegisteredTriggerZones.Num());
+		       *GetName(), *Zone->GetName(), RegisteredTriggerZones.Num());
 	}
 }
 
@@ -1560,10 +1630,10 @@ EStageState AStage::GetStageState() const
 void AStage::GotoState(EStageState TargetState)
 {
 	UE_LOG(LogStage, Log, TEXT("Stage [%s]: GotoState(%s) requested"),
-		*GetName(),
-		TargetState == EStageState::Unloaded ? TEXT("Unloaded") :
-		TargetState == EStageState::Loaded ? TEXT("Loaded") :
-		TargetState == EStageState::Active ? TEXT("Active") : TEXT("Unknown"));
+	       *GetName(),
+	       TargetState == EStageState::Unloaded ? TEXT("Unloaded") :
+	       TargetState == EStageState::Loaded ? TEXT("Loaded") :
+	       TargetState == EStageState::Active ? TEXT("Active") : TEXT("Unknown"));
 
 	switch (TargetState)
 	{
@@ -1605,7 +1675,7 @@ void AStage::GotoState(EStageState TargetState)
 		case EStageRuntimeState::Preloading:
 			// Already loading, wait for completion
 			UE_LOG(LogStage, Verbose, TEXT("Stage [%s]: GotoState(Active) - still preloading"),
-				*GetName());
+			       *GetName());
 			break;
 
 		case EStageRuntimeState::Loaded:
@@ -1619,7 +1689,7 @@ void AStage::GotoState(EStageState TargetState)
 
 		case EStageRuntimeState::Unloading:
 			UE_LOG(LogStage, Warning, TEXT("Stage [%s]: GotoState(Active) called during unloading - ignored"),
-				*GetName());
+			       *GetName());
 			break;
 		}
 		break;
@@ -1656,4 +1726,38 @@ FString AStage::GetStageDataLayerDisplayName() const
 
 	// Fallback to cached name (for compatibility when Asset is null)
 	return StageDataLayerName;
+}
+
+//----------------------------------------------------------------
+// Entity Ready Tracking (BeginPlay Counting)
+//----------------------------------------------------------------
+
+void AStage::OnEntityReady(int32 EntityID)
+{
+	PendingReadyEntities.Remove(EntityID);
+
+	UE_LOG(LogStage, Verbose, TEXT("Stage [%s]: Entity %d ready, %d remaining"),
+	       *GetName(), EntityID, PendingReadyEntities.Num());
+
+	if (PendingReadyEntities.Num() == 0)
+	{
+		UE_LOG(LogStage, Log, TEXT("Stage [%s]: All pending Entities ready - broadcasting load complete"),
+		       *GetName());
+		OnActActivatedComplete.Broadcast(RecentActivatedActID);
+		ReceiveOnActActivatedComplete(RecentActivatedActID);
+
+		// Notify each Entity that the Act is ready
+		if (const FAct* CompletedAct = Acts.FindByPredicate([this](const FAct& Act) {
+			return Act.SUID.ActID == RecentActivatedActID;
+		}))
+		{
+			for (const auto& Pair : CompletedAct->EntityStateOverrides)
+			{
+				if (UStageEntityComponent* Comp = GetEntityComponentByID(Pair.Key))
+				{
+					Comp->OnActActivatedComplete.Broadcast(RecentActivatedActID);
+				}
+			}
+		}
+	}
 }

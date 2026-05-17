@@ -25,6 +25,5 @@
 			"Type": "Editor",
 			"LoadingPhase": "PostEngineInit"
 		}
-	],
-	"NoCode": true
+	]
 }

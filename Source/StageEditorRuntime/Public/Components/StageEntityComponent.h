@@ -8,6 +8,7 @@
 class AStage;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnEntityStateChanged, int32, NewState, int32, OldState);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnEntityActActivatedComplete, int32, ActID);
 
 /**
  * @brief Core component that makes any Actor a controllable Entity in the Stage system.
@@ -68,6 +69,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "StageEditor")
 	TSoftObjectPtr<AStage> OwnerStage;
 
+	/** True after BeginPlay has completed for this Entity. */
+	bool bHasBegunPlay = false;
+
 	/**
 	 * The current state of this Entity.
 	 * Modified by the Stage Manager via SetEntityState().
@@ -82,6 +86,14 @@ public:
 	/** Event fired when EntityState changes. Implement logic here in Blueprints. */
 	UPROPERTY(BlueprintAssignable, Category = "StageEditor")
 	FOnEntityStateChanged OnEntityStateChanged;
+
+	/** Broadcast on each Entity when its owning Act finishes activation (all Entities ready). */
+	UPROPERTY(BlueprintAssignable, Category = "StageEditor|Events")
+	FOnEntityActActivatedComplete OnActActivatedComplete;
+
+	/** Called on each Entity when the owning Act finishes activation (all Entities ready). */
+	UFUNCTION(BlueprintImplementableEvent, Category = "StageEditor|Events")
+	void ReceiveOnActActivatedComplete(int32 ActID);
 
 	//----------------------------------------------------------------
 	// State Control API

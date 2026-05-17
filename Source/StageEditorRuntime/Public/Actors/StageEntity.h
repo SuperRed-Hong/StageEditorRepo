@@ -9,48 +9,29 @@
 
 /**
  * @brief Convenience base class for Entity Actors.
- * Automatically includes UStageEntityComponent for quick setup.
- * All core logic is in the component - this is just a wrapper.
+ *
+ * On BeginPlay, automatically finds a UStageEntityComponent (or BP subclass like
+ * BPC_BaseStageEntityComponent) that you added in the Blueprint Components panel.
+ *
+ * C++ does NOT auto-create the component — that's intentional. It lets you choose
+ * whichever BP component class you want. Just add it once in each Entity BP.
  */
 UCLASS(Abstract, Blueprintable)
 class STAGEEDITORRUNTIME_API AStageEntity : public AActor
 {
 	GENERATED_BODY()
-	
-public:	
-#pragma region Construction
-	/**
-	 * @brief Default constructor.
-	 * Initializes the EntityComponent.
-	 */
+
+public:
 	AStageEntity();
-#pragma endregion Construction
 
 protected:
-#pragma region Lifecycle
-	/**
-	 * @brief Called when the game starts or when spawned.
-	 */
 	virtual void BeginPlay() override;
-#pragma endregion Lifecycle
 
-public:	
-#pragma region Components
-	/** The core Entity component that holds all logic. */
+public:
+	/** The Entity component. Auto-resolved from BP-added components in BeginPlay. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stage Entity")
 	TObjectPtr<UStageEntityComponent> EntityComponent;
-#pragma endregion Components
 
-#pragma region Convenience Wrappers
-	//----------------------------------------------------------------
-	// Convenience Wrappers (delegates to Component)
-	//----------------------------------------------------------------
-
-	/**
-	 * @brief Get the current EntityState.
-	 * @return The current state value.
-	 */
 	UFUNCTION(BlueprintCallable, Category = "Stage Entity")
 	int32 GetEntityState() const { return EntityComponent ? EntityComponent->EntityState : 0; }
-#pragma endregion Convenience Wrappers
 };

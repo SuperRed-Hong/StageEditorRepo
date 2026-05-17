@@ -1,4 +1,5 @@
 #include "Components/StageEntityComponent.h"
+#include "TimerManager.h"
 #include "Actors/Stage.h"
 
 #if WITH_EDITOR
@@ -71,6 +72,8 @@ void UStageEntityComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
+	bHasBegunPlay = true;
+
 	// World Partition streaming support: Entity Actors load asynchronously after their DataLayer
 	// activates, so ActivateAct's push-based SetEntityState has already missed this Entity.
 	// Pull the effective state here so the Entity initializes correctly regardless of load timing.
@@ -85,6 +88,14 @@ void UStageEntityComponent::BeginPlay()
 				const int32 EffectiveState = Stage->GetEffectiveEntityState(SUID.EntityID);
 				SetEntityState(EffectiveState);
 			}
+
+			// Defer OnEntityReady by one tick so BP ReceiveBeginPlay completes first
+			const int32 EntID = SUID.EntityID;
+			AStage* Owner = Stage;
+			GetWorld()->GetTimerManager().SetTimerForNextTick([Owner, EntID]()
+			{
+				Owner->OnEntityReady(EntID);
+			});
 		}
 	}
 }
