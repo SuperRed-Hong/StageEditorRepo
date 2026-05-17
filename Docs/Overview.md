@@ -1,8 +1,8 @@
 # StageEditor - 开发进度总览
 
 > 文档创建日期: 2025-11-29（项目中途开始记录）
-> 当前状态: ✅ Phase 1-27 全部完成 | ✅ Phase 28 Sync Bug + Registry 生命周期 + 性能修复 + 序列化修复完成 | 📋 UStageDataLayerAsset 设计中
-> 最后更新: 2026-05-03
+> 当前状态: ✅ Phase 1-28 全部完成 | ✅ Phase 29 OnActActivatedComplete 回调完成 | 📋 Loading Monitor 设计中
+> 最后更新: 2026-05-17
 >
 > 📂 **文档导航**: [Docs README](README.md) - 本文档索引
 > 📚 **完整归档**: 详细子文档在主项目 `Docs/StageEditor/` 中（约128个文件），本仓库仅包含核心开发计划（本文档）+ 教程 + API 参考
@@ -118,6 +118,20 @@
 > **详细文档:** [Phase28.4_TwoBugFixes.md](CoreArchitecture/Phase28.4_TwoBugFixes.md)
 > **修改文件:** `StageEditorStateManager.h/.cpp`, `StageEditorPanel.cpp`, `StageEntityComponent.h`
 
+#### ✅ Phase 29 - OnActActivatedComplete 回调（2026-05-17）
+
+> **状态:** ✅ 已完成
+> **最终设计:** 主项目 `Docs/StageEditor/CoreArchitecture/Phase29_OnActActivatedComplete_FinalDesign.md`
+
+**核心成果:**
+- ✅ `OnActActivatedComplete`（原 `OnActDataLayerLoadComplete`）— 保证回调在 Entity BP ReceiveBeginPlay 之后
+- ✅ `PendingReadyEntities` 计数 + `SetTimerForNextTick` 延迟归零机制
+- ✅ `UStageEntityComponent::OnActActivatedComplete` — Entity 侧 BlueprintAssignable delegate
+- ✅ `AStageEntity` 简化 — BP 手动添加组件，`FindComponentByClass` 解析
+
+**待实施:**
+- ⏳ Loading Monitor 实现
+
 #### ✅ Phase 27 - DeactivateStage / Active→Loaded 转换补全（2026-04-25）
 > **文档:** [Phase27_DeactivateStage.md](CoreArchitecture/Phase27_DeactivateStage.md)
 
@@ -231,6 +245,7 @@ Registry 持久化 + 双 Subsystem 架构 + 元数据缓存 + ID 回收。提炼
 | **26** | **PresetAction 权威化（Opt-In 开关 bUseCustomActions）** | ✅ 已完成 | [Phase26](EditorFeatures/Phase26_PresetAction_AuthorityRefactor.md) |
 | **27** | **DeactivateStage / Active→Loaded 转换补全** | ✅ 已完成 | [Phase27](CoreArchitecture/Phase27_DeactivateStage.md) |
 | **28** | **Sync Bug + Registry 修复 + UStageDataLayerAsset** | ✅ 修复完成 / 📋 Asset 设计中 | [Phase28](CoreArchitecture/StageDataLayerAsset_Design.md) |
+| **29** | **OnActActivatedComplete 回调** | ✅ 已完成 | 主项目 `Docs/StageEditor/CoreArchitecture/` |
 
 ---
 
@@ -287,4 +302,4 @@ Plugins/StageEditor/Source/
 
 ---
 
-*最后更新: 2026-05-03 - Phase 28 Sync Bug + Registry 修复完成，UStageDataLayerAsset 设计中*
+*最后更新: 2026-05-17 - Phase 29 OnActActivatedComplete 回调完成，测试通过*
